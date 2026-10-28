@@ -1,0 +1,4 @@
+{
+  "upstream": "https://bitbucket.example.com",
+  "ssh": "ssh://git@bitbucket.example.com:7999/"
+}

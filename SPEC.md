@@ -12,7 +12,8 @@ Reference T3: [pingdotgg/t3code](https://github.com/pingdotgg/t3code) @ `339179f
 - Work repos untouched (no tracked files, no `.git/config`). No global `~/.gitconfig` changes.
   Git outside T3 keeps https.
 - Zero runtime dependencies. TypeScript run directly by Node 24 type stripping. No build step.
-- Adapter runs independently (Task Scheduler / Startup), not tied to T3's lifecycle.
+- Adapter runs as its own background process, not tied to T3's lifecycle.
+- Windows, macOS and Linux. One config file (`config.json`), one entry point (the launcher).
 - Adapter stores no secret.
 
 ## Pieces
@@ -38,16 +39,32 @@ Reference T3: [pingdotgg/t3code](https://github.com/pingdotgg/t3code) @ `339179f
 ## Launcher
 
 T3 has no setting that injects env into its server or its git calls (verified: no env files; the
-Windows PowerShell-profile capture only takes `PATH`/`FNM_*`; provider-instance `environment` only
-reaches agents). Backend and git inherit the Electron process env (`extendEnv`, `process.env` read
-per git call). So: `launch-t3.cmd` sets `T3CODE_BITBUCKET_API_BASE_URL` + the `GIT_CONFIG_*` trio
-and starts `%LOCALAPPDATA%\Programs\t3code\T3 Code*.exe`. User makes a shortcut to it (Start /
-taskbar). Nothing user-wide; base URL lives here too, so everything T3-specific is in one file.
+Windows PowerShell-profile capture only takes `PATH`/`FNM_*`, the macOS/Linux login-shell capture
+only a fixed allowlist (`PATH`, `SSH_AUTH_SOCK`, …); provider-instance `environment` only reaches
+agents). Backend and git inherit the Electron process env (`extendEnv`, `process.env` read per git
+call), and the shell capture only fills gaps, never drops inherited vars.
+
+So: `node src/launch.ts` reads `config.json` (`upstream`, `ssh`, optional `app`, `port`), then:
+1. If nothing answers on `127.0.0.1:<port>`, starts `src/main.ts` detached (log in the OS temp dir,
+   `t3code-bitbucket-dc-adapter.log`). It outlives the launcher and T3.
+2. Starts T3 detached with `T3CODE_BITBUCKET_API_BASE_URL` + the `GIT_CONFIG_*` trio
+   (`<ssh>` insteadOf `<upstream>/scm/`). T3 executable: `app`, else
+   `%LOCALAPPDATA%\Programs\t3code\T3 Code*.exe` (Windows) or
+   `/Applications|~/Applications/T3 Code*.app/Contents/MacOS/*` (macOS). Linux (AppImage, any
+   path) needs `app`.
+
+`src/setup.ts` (via `setup-windows.cmd` / `setup-macos.command` / `setup-linux.sh`, which check
+Node 24+) prompts for `config.json` if missing and creates the OS shortcut to the launcher: Start
+menu `.lnk` (Windows), `osacompile` app in `~/Applications` (macOS), `.desktop` file (Linux).
+Nothing user-wide.
 
 Caveats (documented, not engineered around):
 - Single-instance: if T3 already runs, the launcher only focuses it → quit T3 first.
-- Auto-update relaunches via the Start Menu `.lnk` (installer recreates it) → env likely lost →
-  quit + relaunch via launcher after an update. Settings-driven `app.relaunch` keeps env.
+- Auto-update relaunches T3 without the launcher → env likely lost → quit + relaunch via launcher
+  after an update. Settings-driven `app.relaunch` keeps env.
+- A running adapter is reused as-is; after changing `upstream`/`port`, stop it (the `node` process
+  running `src/main.ts`) and relaunch.
+- Only tested on Windows.
 - The env also reaches T3's integrated terminals and agents (git there uses SSH too). Intended.
 - Started any other way → PR features fail (identity `scm/proj/repo`), nothing breaks.
 
