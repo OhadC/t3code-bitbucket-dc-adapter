@@ -185,7 +185,9 @@ export function startFakeServer() {
     const at = query.get("at");
     const direction = (query.get("direction") ?? "INCOMING").toUpperCase();
     const order = (query.get("order") ?? "NEWEST").toUpperCase();
+    const author = query.get("role.1") === "AUTHOR" ? query.get("username.1") : null;
     return prs
+      .filter((pr) => !author || pr.author.user.name === author)
       .filter((pr) => state === "ALL" || pr.state === state)
       .filter((pr) => !text || pr.title.toLowerCase().includes(text) || (pr.description ?? "").toLowerCase().includes(text))
       .filter((pr) => !at || (direction === "OUTGOING" ? pr.fromRef.id : pr.toRef.id) === at)

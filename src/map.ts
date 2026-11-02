@@ -75,6 +75,7 @@ export function pullRequest(pr: J, votes?: Map<string, number>): J {
     destination: side(pr.toRef),
     created_on: iso(pr.createdDate),
     updated_on: iso(pr.updatedDate),
+    closed_on: pr.closedDate === undefined ? null : iso(pr.closedDate),
     reviewers: (pr.reviewers ?? []).map((r: J) => user(r.user)).filter(Boolean),
     participants,
     links: { html: { href: prUrl(pr) } },
@@ -179,6 +180,9 @@ export interface ListQuery {
   branch?: string;
   search?: string;
   updatedBefore?: number;
+  excludedIds?: number[];
+  draft?: boolean;
+  author?: string;
 }
 
 const LITERAL = String.raw`"((?:[^"\\]|\\.)*)"`;
@@ -206,11 +210,33 @@ export function parseListQuery(q: string | null): ListQuery | null {
       },
     ],
     [
-      /^updated_on <= (\S+)/,
+      /^updated_on < (\S+)/,
       (m) => {
         const at = Date.parse(m[1]!);
         if (Number.isNaN(at)) return false;
         out.updatedBefore = at;
+        return true;
+      },
+    ],
+    [
+      /^id != (\d+)/,
+      (m) => {
+        (out.excludedIds ??= []).push(Number(m[1]));
+        return true;
+      },
+    ],
+    [
+      new RegExp(`^\\(author\\.nickname = ${LITERAL} OR author\\.display_name = ${LITERAL}\\)`),
+      (m) => {
+        if (m[1] !== m[2]) return false;
+        out.author = unescape(m[1]!);
+        return true;
+      },
+    ],
+    [
+      /^draft = (true|false)/,
+      (m) => {
+        out.draft = m[1] === "true";
         return true;
       },
     ],

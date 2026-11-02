@@ -74,7 +74,7 @@ test("parseListQuery understands exactly what T3 sends", () => {
   assert.deepEqual(parseListQuery(null), {});
   assert.deepEqual(parseListQuery('source.branch.name = "feat/a\\"b" AND state = "OPEN"'), { branch: 'feat/a"b' });
   assert.deepEqual(
-    parseListQuery('(title ~ "fix AND x" OR description ~ "fix AND x") AND updated_on <= 2026-10-15T06:50:00.000Z'),
+    parseListQuery('(title ~ "fix AND x" OR description ~ "fix AND x") AND updated_on < 2026-10-15T06:50:00.000Z'),
     { search: "fix AND x", updatedBefore: Date.parse("2026-10-15T06:50:00.000Z") },
   );
   assert.deepEqual(parseListQuery('source.branch.name = "b" AND (state = "DECLINED" OR state = "SUPERSEDED")'), { branch: "b" });

@@ -112,7 +112,7 @@ const pullRequest = (input: {
   draft: input.draft ?? false,
   createdDate: input.createdDate,
   updatedDate: input.updatedDate,
-  ...(input.state === "OPEN" ? {} : { closedDate: input.updatedDate }),
+  ...(input.state === "OPEN" ? {} : { closedDate: input.updatedDate - 3_600_000 }),
   fromRef: ref(input.from, input.sha),
   toRef: ref(DEVELOP, DEVELOP_SHA),
   locked: false,

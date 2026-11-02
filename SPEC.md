@@ -4,7 +4,9 @@ Make the **official** T3 Code desktop build work with self-hosted Bitbucket Serv
 (built against 9.4) by putting a tiny local adapter in front of it that speaks the subset of
 Bitbucket **Cloud** REST 2.0 that T3's Cloud driver uses.
 
-Reference T3: [pingdotgg/t3code](https://github.com/pingdotgg/t3code) @ `339179f50a` (`packages/source-control-bitbucket`).
+Reference T3: [pingdotgg/t3code](https://github.com/pingdotgg/t3code) @ `ac8dce0cc3` (2026-11-02,
+`packages/source-control-bitbucket`). Last upstream sync: everything up to this commit is reviewed
+and passes the contract tests.
 
 ## Constraints
 
@@ -66,7 +68,7 @@ Caveats (documented, not engineered around):
   running `src/main.ts`) and relaunch.
 - Only tested on Windows.
 - The env also reaches T3's integrated terminals and agents (git there uses SSH too). Intended.
-- Started any other way → PR features fail (identity `scm/proj/repo`), nothing breaks.
+- Started any other way → T3 treats the Server host as unsupported (no PR features), nothing breaks.
 
 ## Adapter behaviour
 
@@ -125,8 +127,9 @@ only from these ANDed clauses:
 - `source.branch.name = "<b>"` → `at=refs/heads/<b>&direction=OUTGOING`
 - `state = "X"` / `(state = "X" OR …)` → ignored (same info as `state=` params)
 - `(title ~ "<t>" OR description ~ "<t>")` → `filterText=<t>`
-- `updated_on <= <iso>` → filtered in the adapter per page (Server's `NEWEST` is `updatedDate`
-  desc, verified); `next` kept
+- `(author.nickname = "<u>" OR author.display_name = "<u>")` → `role.1=AUTHOR&username.1=<u>`
+- `updated_on < <iso>`, `id != <n>` (repeatable), `draft = true|false` → filtered in the adapter
+  per page (Server's `NEWEST` is `updatedDate` desc, verified); `next` kept
 
 Any other clause → 501. States: `{OPEN}`→`OPEN`, `{MERGED}`→`MERGED`, `{DECLINED[,SUPERSEDED]}`→
 `DECLINED`, more than one of OPEN/MERGED/DECLINED → `ALL` + local filter.
@@ -134,7 +137,8 @@ Any other clause → 501. States: `{OPEN}`→`OPEN`, `{MERGED}`→`MERGED`, `{DE
 ### PR mapping (Server → Cloud)
 
 `id`, `title`, `description`, `state` (`OPEN|MERGED|DECLINED` same words), `draft`,
-`created_on`/`updated_on`, `author` (user), `source`/`destination` =
+`created_on`/`updated_on`, `closed_on` (`closedDate`, null while open; T3 settles merged threads
+on it), `author` (user), `source`/`destination` =
 `{branch:{name: displayId}, commit:{hash: latestCommit}, repository:{full_name, workspace:{slug}}}`,
 `reviewers` (users), `participants` = reviewers + participants with
 `role`, `approved`, `state` (`APPROVED`→`approved`, `NEEDS_WORK`→`changes_requested`, else null),
@@ -160,7 +164,7 @@ Server needs `lineType`, which Cloud doesn't send: fetch the PR `.diff`, find th
 
 - **Contract (primary)**: run T3's real `BitbucketApi` + `BitbucketPullRequestApi` +
   `BitbucketPullRequestProvider` (imported from the t3code clone, `T3CODE_SRC` env, default
-  `../t3code`; skipped if absent) against the adapter, with a fake Server (local
+  `../t3code`; fails if absent) against the adapter, with a fake Server (local
   HTTP, JSON fixtures shaped like real 9.4 responses). Assert what T3 ends up with (PR fields,
   states, comments/threads, checks, diffstat, mergeability, default branch, viewer) and what the
   fake Server received (paths, `version`, anchors, strategyId). This catches shape drift, the
@@ -170,10 +174,12 @@ Server needs `lineType`, which Cloud doesn't send: fetch the PR `.diff`, find th
 
 ## Known limitations
 
-- `mergedAt`/`closedAt` null (T3 Cloud driver doesn't read them).
 - No delete-branch after merge; no reopen; no reviewers/members, comment edit/resolve, per-commit
   diff (v2).
 - Server PR URLs pasted in chat don't parse as Bitbucket PR links → link by repo + number.
+- Commit links T3 builds itself are Cloud-shaped (`<host>/<proj>/<repo>/commits/<sha>`) → 404 on
+  Server.
+- Author filter matches the Server username only, not the display name.
 - PR watch is T3's 2-minute polling.
 - `version` races: adapter reads version immediately before writing; a concurrent edit → Server
   409 surfaces as a failed action.
