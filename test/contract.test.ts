@@ -10,7 +10,9 @@ import * as F from "./fixtures.ts";
 
 const T3 = process.env.T3CODE_SRC ?? join(import.meta.dirname, "..", "..", "t3code");
 const BB = join(T3, "packages", "source-control-bitbucket");
-const present = existsSync(join(BB, "src", "server", "BitbucketApi.ts"));
+if (!existsSync(join(BB, "src", "server", "BitbucketApi.ts"))) {
+  throw new Error(`No t3code clone at ${T3}. Clone it there or set T3CODE_SRC.`);
+}
 
 const REPO = "proj/web-app";
 const UPSTREAM_REPO = "/rest/api/1.0/projects/proj/repos/web-app";
@@ -25,7 +27,7 @@ const CONTEXT = {
 
 const load = (path: string) => import(pathToFileURL(path).href);
 
-describe("contract: T3 Bitbucket Cloud driver -> adapter -> fake Server", { skip: present ? false : `no T3 source at ${T3}` }, () => {
+describe("contract: T3 Bitbucket Cloud driver -> adapter -> fake Server", () => {
   const fake = startFakeServer();
   const logs: string[] = [];
   let adapter: Server;
@@ -57,6 +59,7 @@ describe("contract: T3 Bitbucket Cloud driver -> adapter -> fake Server", { skip
     const { FetchHttpClient } = await load(join(effect, "dist", "http", "index.js"));
     const contracts = await load(join(T3, "packages", "contracts", "src", "index.ts"));
     const TestHost = await load(join(T3, "packages", "source-control-testing", "src", "TestSourceControlHost.ts"));
+    const RateLimit = await load(join(T3, "packages", "source-control-core", "src", "server", "SourceControlRateLimit.ts"));
     const server = join(BB, "src", "server");
     const BitbucketApi = await load(join(server, "BitbucketApi.ts"));
     const BitbucketPullRequestApi = await load(join(server, "BitbucketPullRequestApi.ts"));
@@ -69,7 +72,7 @@ describe("contract: T3 Bitbucket Cloud driver -> adapter -> fake Server", { skip
     const files = FileSystem.layerNoop({
       readFileString: (path: string) => (path === BODY_FILE ? Effect.succeed("Body from file") : Effect.die(`unexpected read of ${path}`)),
     });
-    const api = BitbucketApi.layer.pipe(Layer.provide(Layer.mergeAll(host, files, FetchHttpClient.layer)));
+    const api = BitbucketApi.layer.pipe(Layer.provide(Layer.mergeAll(host, files, RateLimit.layer, FetchHttpClient.layer)));
     runtime = ManagedRuntime.make(BitbucketPullRequestApi.layer.pipe(Layer.provideMerge(api)));
     provider = await run(BitbucketPullRequestProvider.make);
     scp = await run(BitbucketSourceControlProvider.make);
@@ -170,6 +173,19 @@ describe("contract: T3 Bitbucket Cloud driver -> adapter -> fake Server", { skip
     for (const c of upstream("GET", `${UPSTREAM_REPO}/pull-requests`)) {
       assert.equal(c.query.get("state"), "OPEN");
     }
+
+    const unseen = await list({ state: "open", cursor: { updatedBefore: iso(1792030000000), seenAt: [1335] } });
+    assert.deepEqual(unseen.items.map((i: any) => i.number), [1334]);
+
+    const drafts = await list({ state: "open", filters: { draft: "only" } });
+    assert.deepEqual(drafts.items.map((i: any) => i.number), [1334]);
+    const ready = await list({ state: "open", filters: { draft: "hide" } });
+    assert.deepEqual(ready.items.map((i: any) => i.number), [1338, 1335]);
+
+    const byBob = await list({ state: "open", filters: { author: "bwong" } });
+    assert.deepEqual(byBob.items.map((i: any) => i.number), [1335]);
+    const mine = await list({ state: "open", filters: { author: "@me" } });
+    assert.deepEqual(mine.items.map((i: any) => i.number), [1338, 1334]);
   });
 
   test("4. source control provider lists by head branch and reads one PR", async () => {
@@ -243,9 +259,12 @@ describe("contract: T3 Bitbucket Cloud driver -> adapter -> fake Server", { skip
     const merged = await run(provider.getChangeRequest({ cwd: "C:/repo", repository: REPO, number: 1337 }));
     assert.equal(merged.state, "merged");
     assert.deepEqual([merged.additions, merged.deletions, merged.changedFiles], [1, 1, 1]);
+    assert.deepEqual([merged.mergedAt, merged.closedAt], [iso(1792046400000), null]);
     const declined = await run(provider.getChangeRequest({ cwd: "C:/repo", repository: REPO, number: 1336 }));
     assert.equal(declined.state, "closed");
     assert.equal(declined.body, "");
+    assert.deepEqual([declined.mergedAt, declined.closedAt], [null, iso(1792036400000)]);
+    assert.deepEqual([detail.mergedAt, detail.closedAt], [null, null]);
   });
 
   test("6. getChangeRequestActivity: comments, verdicts, threads, commits", async () => {
@@ -322,7 +341,7 @@ describe("contract: T3 Bitbucket Cloud driver -> adapter -> fake Server", { skip
 
     const revisions = await run(provider.getFileRevisions({ cwd: "C:/repo", repository: REPO, number: 1338, paths: [F.FILE, "missing.ts"] }));
     assert.equal(revisions.complete, true);
-    assert.equal(revisions.revisions.get(F.FILE), "743400ba0");
+    assert.equal(revisions.revisions.get(F.FILE), "89abcdeff");
     assert.equal(revisions.revisions.get(F.NEW_FILE), "1a2b3c4d5");
     assert.equal(revisions.revisions.get("missing.ts"), "");
   });

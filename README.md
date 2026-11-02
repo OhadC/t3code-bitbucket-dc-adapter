@@ -123,7 +123,7 @@ The adapter logs one line per request (status, duration, Bitbucket's error messa
 ## Tests
 
 `npm test`. Unit tests always run. The contract tests run T3's real Bitbucket code from a t3code
-clone (`T3CODE_SRC`, default `../t3code` next to this repo) and are skipped if it's missing.
+clone (`T3CODE_SRC`, default `../t3code` next to this repo) and fail if it's missing.
 
 ## License
 

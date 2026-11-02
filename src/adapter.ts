@@ -201,10 +201,16 @@ export function createAdapter(opts: {
           extra.direction = "OUTGOING";
         }
         if (query.search !== undefined) extra.filterText = query.search;
+        if (query.author !== undefined) {
+          extra["role.1"] = "AUTHOR";
+          extra["username.1"] = query.author;
+        }
         const server = await get(ctx, `${repoPath(ctx)}/pull-requests?${paging(ctx, extra)}`);
         const values = (server.values as J[])
           .filter((pr) => wanted.has(pr.state))
-          .filter((pr) => query.updatedBefore === undefined || pr.updatedDate <= query.updatedBefore)
+          .filter((pr) => query.updatedBefore === undefined || pr.updatedDate < query.updatedBefore)
+          .filter((pr) => !query.excludedIds?.includes(pr.id))
+          .filter((pr) => query.draft === undefined || Boolean(pr.draft) === query.draft)
           .map((pr) => map.pullRequest(pr));
         return page(ctx, server, values);
       },
