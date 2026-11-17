@@ -4,7 +4,7 @@ Make the **official** T3 Code desktop build work with self-hosted Bitbucket Serv
 (built against 9.4) by putting a tiny local adapter in front of it that speaks the subset of
 Bitbucket **Cloud** REST 2.0 that T3's Cloud driver uses.
 
-Reference T3: [pingdotgg/t3code](https://github.com/pingdotgg/t3code) @ `ac8dce0cc3` (2026-11-02,
+Reference T3: [pingdotgg/t3code](https://github.com/pingdotgg/t3code) @ `6ec1d31b1e` (2026-11-17,
 `packages/source-control-bitbucket`). Last upstream sync: everything up to this commit is reviewed
 and passes the contract tests.
 
@@ -112,8 +112,8 @@ Caveats (documented, not engineered around):
 | `POST …/{n}/comments` | `POST …/pull-requests/{n}/comments` | see *Comments* |
 | `POST …/{n}/approve` | `PUT …/participants/{mySlug}` `{status:APPROVED}` | `mySlug` from `/users/{x-ausername}` |
 | `POST …/{n}/request-changes` | `PUT …/participants/{mySlug}` `{status:NEEDS_WORK}` | |
-| `POST …/{n}/merge` `{merge_strategy}` | GET version → `POST …/merge?version=` `{strategyId}` | `merge_commit`→`no-ff`, `squash`→`squash`, `rebase_fast_forward`→`rebase-ff-only`; Server's refusal (vetoes, disabled strategy) passes through |
-| `POST …/{n}/decline` | GET version → `POST …/decline?version=` | |
+| `POST …/{n}/merge` `{merge_strategy}` | GET version → `POST …/merge?version=` `{strategyId}` | `merge_commit`→`no-ff`, `squash`→`squash`, `rebase_fast_forward`→`rebase-ff-only`; Server's refusal (vetoes, disabled strategy) passes through; replies with the mapped PR (T3 updates clients from it instead of re-reading) |
+| `POST …/{n}/decline` | GET version → `POST …/decline?version=` | replies with the mapped PR |
 | `GET /user/workspaces/{ws}/permissions/repositories` | — | `{values: []}` (T3 reads empty as "may write"; Server refuses if not) |
 
 Not supported (501): `POST {p}` (create repo — never), `GET /workspaces/{ws}/members`,
@@ -177,6 +177,8 @@ Server needs `lineType`, which Cloud doesn't send: fetch the PR `.diff`, find th
 - No delete-branch after merge; no reopen; no reviewers/members, comment edit/resolve, per-commit
   diff (v2).
 - Server PR URLs pasted in chat don't parse as Bitbucket PR links → link by repo + number.
+- Server repo page URLs (`/projects/P/repos/r/browse…`) pasted to clone aren't recognised (T3 only
+  reads Cloud's `/ws/repo/src/…`) → paste the clone URL.
 - Commit links T3 builds itself are Cloud-shaped (`<host>/<proj>/<repo>/commits/<sha>`) → 404 on
   Server.
 - Author filter matches the Server username only, not the display name.

@@ -364,7 +364,9 @@ describe("contract: T3 Bitbucket Cloud driver -> adapter -> fake Server", () => 
       ["rebase", "rebase-ff-only"],
     ] as const) {
       fake.reset();
-      await run(provider.runAction({ cwd: "C:/repo", repository: REPO, number: 1338, action: "merge", mergeMethod: method }));
+      const merged = await run(provider.runAction({ cwd: "C:/repo", repository: REPO, number: 1338, action: "merge", mergeMethod: method }));
+      assert.equal(merged?.number, 1338, method);
+      assert.equal(merged?.state, "merged", method);
       const posted = writes();
       assert.equal(posted.length, 1, method);
       assert.equal(posted[0]!.method, "POST");
@@ -375,7 +377,8 @@ describe("contract: T3 Bitbucket Cloud driver -> adapter -> fake Server", () => 
     }
 
     fake.reset();
-    await run(provider.runAction({ cwd: "C:/repo", repository: REPO, number: 1335, action: "close" }));
+    const closed = await run(provider.runAction({ cwd: "C:/repo", repository: REPO, number: 1335, action: "close" }));
+    assert.equal(closed?.state, "closed");
     assert.deepEqual(writes().map((w) => [w.method, w.path.toLowerCase(), w.query.get("version")]), [
       ["POST", `${UPSTREAM_REPO}/pull-requests/1335/decline`, "5"],
     ]);
